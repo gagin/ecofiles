@@ -1,17 +1,20 @@
-setwd("/Users/User/Desktop/ecofiles")
+---
+title: "EROD Calibration charts"
+author: "Alex"
+date: "December 1, 2015"
+output: pdf_document
+---
 
-files <- list.files(path="path/to/dir", pattern="*.txt", full.names=T, recursive=FALSE)
-lapply(files, function(x) {
-        t <- read.table(x, header=T) # load file
-        # apply function
-        out <- function(t)
-                # write to file
-                write.table(out, "path/to/output", sep="\t", quote=F, row.names=F, col.names=T)
-})
+This script prints calibration charts for all text files in its directory.
+
+```{r, results="hide", echo=FALSE}
+files <- list.files(path=".", pattern="*.txt", full.names=T, recursive=FALSE)
+for(xxx in files) {
 
 library(ggplot2)
 
-filename <- "2015-11-25 EROD pr .txt"
+#filename <- "2015-11-25 EROD pr .txt"
+filename <- xxx
 src <- file(filename)
 src.lines <- readLines(src)
 data.list <- list()
@@ -93,7 +96,9 @@ print(
                data=protein.calib) +
                 geom_point() +
                 stat_smooth(method="lm", slope=1, show_guide=TRUE) +
-                ggtitle("Protein Calibration Curve") +
+                ggtitle(paste(
+                        "Protein Calibration Curve\n",
+                        xxx)) +
                 annotate("text",
                          x=min(protein.calib.x)+point.two(protein.calib.x),
                          y=max(protein.calib.y)-point.two(protein.calib.y),
@@ -119,7 +124,9 @@ print(
                data=rs.calib) +
                 geom_point() +
                 stat_smooth(method="lm", slope=1, show_guide=TRUE) +
-                ggtitle("Resurofin Calibration Curve") +
+                ggtitle(paste(
+                        "Resorufin Calibration Curve\n",
+                        xxx)) +
                 annotate("text",
                          x=min(rs.calib.x)+point.two(rs.calib.x),
                          y=max(rs.calib.y)-point.two(rs.calib.y),
@@ -131,3 +138,6 @@ print(
                 xlab("Fluorescence, unitless") +
                 ylab("Resorufin conc, uM")
 )
+
+}
+```
