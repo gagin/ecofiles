@@ -20,6 +20,11 @@ src <- file("2015-11-25 EROD pr .txt")
 src.lines <- readLines(src)
 dat <- list()
 for(i in 1:length(src.lines)) {
+        if(src.lines[i] == "~End") {
+                timer <- NA
+                temp <- NA
+                entry <- NA
+        }
         line.split <- splitUnlist(src.lines[i], "[[:blank:]]+")
         num.elements <- length(line.split)
         if(num.elements > 20) {
