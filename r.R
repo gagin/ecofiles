@@ -1,4 +1,4 @@
-setwd("/Users/User/Desktop/helga")
+setwd("/Users/User/Desktop/ecofiles")
 
 library(lubridate)
 
@@ -27,10 +27,7 @@ for(i in 1:length(src.lines)) {
                 entries[[length(entries)+1]] <- c(entry, src.lines[i])
         }
         if(num.elements == 14 & !grepl("T", line.split[1], fixed=TRUE)) {
-                if(countCharOccurrences(line.split[1], ":")==1)
-                        timer <- ms(line.split[1])
-                if(countCharOccurrences(line.split[1], ":")==2)
-                        timer <- hms(line.split[1])
+                timer <- line.split[1]
                 temp <- line.split[2]
                 dat[[length(dat)+1]] <- c(entry, line.split)
         }
@@ -42,5 +39,13 @@ close(src)
 data <- data.frame(matrix(unlist(dat), nrow=length(dat), byrow = TRUE),
                       stringsAsFactors = FALSE)
 colnames(data) <- c("entry", "time", "temp", sapply(1:12,function(x)paste0("m",x)))
-#data$time <- sapply(data$time, function(x) strsplit(x, ":", fixed=TRUE)[[1]]
-        
+
+### Come back to this if data will actually  include hours
+#data$time <- unlist(lapply(data$time, function(x) {
+#        semicolumns.plusone <- length(strsplit(x, ":", fixed=TRUE)[[1]])
+#        if(semicolumns.plusone == 2) return(as.POSIXct(x,format="%M:%S"))
+#        if(semicolumns.plusone == 3) return(as.POSIXct(x,format="%H:%M:%S"))
+#}))
+
+data$time <- as.POSIXct(data$time, format="%M:%S")
+for(i in 3:15) data[,i] <- as.numeric(data[,i])
