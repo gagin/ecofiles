@@ -2,7 +2,9 @@
 title: "EROD Calibration charts"
 author: "Alex"
 date: "December 1, 2015"
-output: pdf_document
+output: 
+  pdf_document: 
+    fig_height: 8
 ---
 
 This script prints calibration charts for all text files in its directory.
@@ -137,6 +139,66 @@ print(
                 )+
                 xlab("Fluorescence, unitless") +
                 ylab("Resorufin conc, uM")
+)
+
+###### Calculating slopes
+
+samples <- c("βNF1", "βNF2", "βNF3", "βNF4", "βNF5", "βNF S1", "βNF S2", "n", "βNF S3", "βNF S4", "con 11", "con 12", "con 13", "con 14", "con 15", "n1")
+columns <- c("min", "sample", "Fluor 1", "Fluor 2", "Fluor 3", "protein abs 1", "protein abs 2", "protein abs 3", "Resor conc 1", "Resor conc 2", "Resor conc 3", "protein conc 1", "protein conc 2", "protein conc 3", "resor/protein 1", "resor/protein 2", "resor/protein 3", "aver resor/prot", "st dev")
+
+calc <- data.frame(matrix(nrow=length(samples)*16, ncol=length(columns)))
+colnames(calc) <- columns
+
+for( i in seq.int(0,30,2)) {
+        calc[(16*i/2)+(1:16), 1] <- i
+        calc[(16*i/2)+(1:16), 2] <- samples
+                
+        calc[(16*i/2)+(1:8), 3:5] <- data[data$time==i, 4:6]
+        calc[(16*i/2)+(9:16), 3:5] <- data[data$time==i, 7:9]
+        
+        calc[(16*i/2)+(1:8), 3:5] <- data[data$time==i, 4:6]
+        calc[(16*i/2)+(9:16), 3:5] <- data[data$time==i, 7:9]
+        
+        calc[(16*i/2)+(1:8), 6:8] <- proteins[, 2:4]
+        calc[(16*i/2)+(9:16), 6:8] <- proteins[, 5:7]
+}
+
+for( i in 0:2) {
+calc[, 9+i] <- predict(rs.model, data.frame(fluor=calc[, 3+i]))
+calc[, 12+i] <- predict(protein.model, data.frame(fluor=calc[, 6+i]))
+calc[, 15+i] <- calc[, 9+i] / calc[, 12+i]
+}
+calc[, 18] <- rowMeans(calc[, 15:17])
+calc[, 19] <- apply(calc[, 15:17], 1, sd)
+
+calc2 <- calc
+#cleaner <- make.names(columns)
+colnames(calc2) <- make.names(columns)
+# Avoid using min and sample as column names to prevent confusion with functions
+colnames(calc2)[1] <- "timer"
+colnames(calc2)[2] <- "smpl"
+
+models <- list()
+legendary <- character()
+for(i in 1:length(samples)) {
+        models[[i]] <- lm(aver.resor.prot ~ timer, data=calc2[calc2$smpl==samples[i], ])
+        legendary <- paste0(legendary, 
+                            "\n",
+                            samples[i],
+                            ": ",
+                            get.formula(models[[i]])
+        )
+}
+
+print(
+        ggplot(aes(timer, aver.resor.prot, color=smpl), data=calc2) +
+                geom_point() +
+                annotate("text",
+                         x=min(calc2$timer)+point.two(calc2$timer, 0.3),
+                         y=max(calc2$aver.resor.prot)-point.two(calc2$aver.resor.prot, 0.3),
+                         label=legendary
+                )
+                
 )
 
 }
