@@ -1,11 +1,13 @@
 setwd("/Users/User/Desktop/ecofiles")
 
+library(ggplot2)
+
 filename <- "2015-11-25 EROD pr .txt"
 src <- file(filename)
 src.lines <- readLines(src)
 data.list <- list()
 proteins.list <- list()
-src.split <- strsplit(src.lines,"\\t")
+src.split <- strsplit(src.lines, "\\t")
 for(i in 1:length(src.lines)) {
         if(src.lines[i] == "~End") {
                 timer <- NA
@@ -24,7 +26,8 @@ for(i in 1:length(src.lines)) {
                 # repopulate missing fields
                 src.split[[i]][1] <- timer
                 src.split[[i]][2] <- temp
-                data.list[[length(data.list)+1]] <- c(sample.number,src.split[[i]])
+                data.list[[length(data.list)+1]] <- c(sample.number,
+                                                      src.split[[i]])
                 next
         }
         # Handle last group of lines
@@ -39,7 +42,8 @@ data <- data.frame(matrix(as.numeric(unlist(data.list)),
                           byrow = TRUE))
 # drop last empty column
 data <- data[, 1:15]
-colnames(data) <- c("sample", "time", "temp", sapply(1:12,function(x)paste0("m",x)))
+colnames(data) <- c("sample", "time", "temp",
+                    sapply(1:12, function(x) paste0("m", x)))
 
 proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
                           nrow=length(proteins.list),
@@ -47,3 +51,74 @@ proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
 # drop last empty column
 proteins <- proteins[, 2:14]
 
+####### Helper functions for calibration charts
+
+get.formula <- function(model) {
+        sign.char <- "+"
+        if(model$coefficients[1] < 0) sign.char <- "-"
+        paste0("y = ",
+               sprintf("%.4f", model$coefficients[2],4),
+               "x ",
+               sign.char,
+               " ",
+               sprintf("%.4f", abs(coefficients(model)[1]))
+        )
+}
+
+get.r.squared <- function(model) {
+        sprintf("R squared = %.4f", summary(model)$r.squared)
+}
+
+point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
+
+######## Protein Calibration
+
+protein.calib.x <- rowMeans(proteins[1:6, 12:13])
+protein.calib.y <- c(0, 0.1, 0.35, 0.75, 1.1, 1.3)
+protein.calib <- data.frame(fluor=protein.calib.x,
+                            conc=protein.calib.y)
+protein.model <- lm(conc ~ fluor, data=protein.calib)
+
+print(
+        ggplot(aes(fluor, conc),
+               data=protein.calib) +
+                geom_point() +
+                stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+                ggtitle("Protein Calibration Curve") +
+                annotate("text",
+                         x=min(protein.calib.x)+point.two(protein.calib.x),
+                         y=max(protein.calib.y)-point.two(protein.calib.y),
+                         label=paste(
+                                 get.formula(protein.model),
+                                 get.r.squared(protein.model),
+                                 sep="\n")
+                         )+
+                xlab("Fluorescence, unitless") +
+                ylab("Protein conc., mg/ml")
+        )
+                     
+####### Resorufin Calibration
+
+rs.calib.x <- rowMeans(data[121:126, 12:13])
+rs.calib.y <- c(0, 0.1, 0.2, 0.3, 0.4, 0.5)
+rs.calib <- data.frame(fluor=rs.calib.x,
+                            conc=rs.calib.y)
+rs.model <- lm(conc ~ fluor, data=rs.calib)
+
+print(
+        ggplot(aes(fluor, conc),
+               data=rs.calib) +
+                geom_point() +
+                stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+                ggtitle("Resurofin Calibration Curve") +
+                annotate("text",
+                         x=min(rs.calib.x)+point.two(rs.calib.x),
+                         y=max(rs.calib.y)-point.two(rs.calib.y),
+                         label=paste(
+                                 get.formula(rs.model),
+                                 get.r.squared(rs.model),
+                                 sep="\n")
+                )+
+                xlab("Fluorescence, unitless") +
+                ylab("Resorufin conc, uM")
+)
