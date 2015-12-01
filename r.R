@@ -1,56 +1,49 @@
 setwd("/Users/User/Desktop/ecofiles")
 
-library(lubridate)
-
-library(digest)
-entries <- list()
-
-splitUnlist <- function(s, p) {
-        res <- unlist(strsplit(s, p))
-        a <- 1
-        if(res[[1]]=="") a <- 2
-        res[a:length(res)]
-}
-
-countCharOccurrences <- function(s, char) {
-        length(strsplit(s, char, fixed=TRUE)[[1]])-1
-}
-
-src <- file("2015-11-25 EROD pr .txt")
+filename <- "2015-11-25 EROD pr .txt"
+src <- file(filename)
 src.lines <- readLines(src)
-dat <- list()
+data.list <- list()
+proteins.list <- list()
+src.split <- strsplit(src.lines,"\\t")
 for(i in 1:length(src.lines)) {
         if(src.lines[i] == "~End") {
                 timer <- NA
                 temp <- NA
-                entry <- NA
+                sample.number <- NA
         }
-        line.split <- splitUnlist(src.lines[i], "[[:blank:]]+")
-        num.elements <- length(line.split)
-        if(num.elements > 20) {
-                entry <- digest(src.lines[i])
-                entries[[length(entries)+1]] <- c(entry, src.lines[i])
+        if(length(src.split[[i]]) != 15) next
+        first.split <- strsplit(src.split[[i]][1], ":0", fixed=TRUE)[[1]]
+        if(length(first.split) > 1) {
+                timer <- first.split[1]
+                temp <- src.split[[i]][2]
+                sample.number <- 1
         }
-        if(num.elements == 14 & !grepl("T", line.split[1], fixed=TRUE)) {
-                timer <- line.split[1]
-                temp <- line.split[2]
-                dat[[length(dat)+1]] <- c(entry, line.split)
+        if(!is.na(timer)) {
+                if(src.split[[i]][1] == "") sample.number <- sample.number + 1
+                # repopulate missing fields
+                src.split[[i]][1] <- timer
+                src.split[[i]][2] <- temp
+                data.list[[length(data.list)+1]] <- c(sample.number,src.split[[i]])
+                next
         }
-        if(num.elements == 12) {
-                dat[[length(dat)+1]] <- c(entry, timer, temp, line.split)
-        }
+        # Handle last group of lines
+        if(grepl("Temp", src.split[[i]][2], fixed=TRUE)) next
+        if(src.split[[i]][2] != "") temp <- src.split[[i]][2]
+        if(src.split[[i]][2] == "") src.split[[i]][2] <- temp
+        proteins.list[[length(proteins.list)+1]] <- src.split[[i]]
 }
 close(src)
-data <- data.frame(matrix(unlist(dat), nrow=length(dat), byrow = TRUE),
-                      stringsAsFactors = FALSE)
-colnames(data) <- c("entry", "time", "temp", sapply(1:12,function(x)paste0("m",x)))
+data <- data.frame(matrix(as.numeric(unlist(data.list)),
+                          nrow=length(dat),
+                          byrow = TRUE))
+# drop last empty column
+data <- data[, 1:15]
+colnames(data) <- c("sample", "time", "temp", sapply(1:12,function(x)paste0("m",x)))
 
-### Come back to this if data will actually  include hours
-#data$time <- unlist(lapply(data$time, function(x) {
-#        semicolumns.plusone <- length(strsplit(x, ":", fixed=TRUE)[[1]])
-#        if(semicolumns.plusone == 2) return(as.POSIXct(x,format="%M:%S"))
-#        if(semicolumns.plusone == 3) return(as.POSIXct(x,format="%H:%M:%S"))
-#}))
+proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
+                          nrow=length(proteins.list),
+                          byrow = TRUE))
+# drop last empty column
+proteins <- proteins[, 2:14]
 
-data$time <- as.POSIXct(data$time, format="%M:%S")
-for(i in 3:15) data[,i] <- as.numeric(data[,i])
