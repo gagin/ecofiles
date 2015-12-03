@@ -200,6 +200,7 @@ for(i in 1:length(samples)) {
 print(
         ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
                 geom_point() +
+                guides(colour=FALSE) +
                 facet_wrap(~smpl) +
                 geom_text(data=data.frame(smpl=samples,l=legendary.i),
                           size=3,
