@@ -178,10 +178,15 @@ colnames(calc2) <- make.names(columns)
 colnames(calc2)[1] <- "timer"
 colnames(calc2)[2] <- "smpl"
 
+library(dplyr)
+library(tidyr)
+
+calc3 <- calc2[, c(1,2,15:17)] %>% gather(take, resor.prot, -timer, -smpl)
+
 models <- list()
 legendary <- character()
 for(i in 1:length(samples)) {
-        models[[i]] <- lm(aver.resor.prot ~ timer, data=calc2[calc2$smpl==samples[i], ])
+        models[[i]] <- lm(resor.prot ~ timer, data=calc3[calc3$smpl==samples[i], ])
         legendary <- paste0(legendary, 
                             "\n",
                             samples[i],
@@ -191,11 +196,18 @@ for(i in 1:length(samples)) {
 }
 
 print(
-        ggplot(aes(timer, aver.resor.prot, color=smpl), data=calc2) +
+        ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
+                geom_point() +
+                facet_wrap(~smpl)
+                
+)
+
+print(
+        ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
                 geom_point() +
                 annotate("text",
-                         x=min(calc2$timer)+point.two(calc2$timer, 0.3),
-                         y=max(calc2$aver.resor.prot)-point.two(calc2$aver.resor.prot, 0.3),
+                         x=min(calc3$timer)+point.two(calc3$timer, 0.3),
+                         y=max(calc3$resor.prot)-point.two(calc3$resor.prot, 0.3),
                          label=legendary
                 )
                 
