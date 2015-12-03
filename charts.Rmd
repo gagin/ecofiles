@@ -184,23 +184,33 @@ library(tidyr)
 calc3 <- calc2[, c(1,2,15:17)] %>% gather(take, resor.prot, -timer, -smpl)
 
 models <- list()
+legendary.i <- character(length(samples))
 legendary <- character()
 for(i in 1:length(samples)) {
         models[[i]] <- lm(resor.prot ~ timer, data=calc3[calc3$smpl==samples[i], ])
-        legendary <- paste0(legendary, 
+         legendary.i[i] <- get.formula(models[[i]])
+         legendary <- paste0(legendary, 
                             "\n",
                             samples[i],
                             ": ",
-                            get.formula(models[[i]])
+                            legendary.i[i]
         )
 }
 
 print(
         ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
                 geom_point() +
-                facet_wrap(~smpl)
+                facet_wrap(~smpl) +
+                geom_text(data=data.frame(smpl=samples,l=legendary.i),
+                          size=3,
+                          aes(x=min(calc3$timer)+point.two(calc3$timer, 0.5),
+                              y=max(calc3$resor.prot)-point.two(calc3$resor.prot, 0.2),
+                              label = l),
+                          inherit.aes=FALSE, parse=FALSE)
                 
 )
+
+# All at one chart
 
 print(
         ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
