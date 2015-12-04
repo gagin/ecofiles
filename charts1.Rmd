@@ -38,6 +38,7 @@ drop.lines <- 5
 # TODO Is BLOCK= 3 comment meaningful?
 src <- file(filename)
 src.lines <- readLines(src)
+close(src)
 
 data.length <- length(timers) * measurements.count
 data <- data.frame(timer=numeric(data.length),
@@ -61,26 +62,30 @@ for(block in 0:(length(timers)-1)) {
         
 #######################################################################################
 
-        # Handle last group of lines
-        if(grepl("Temp", src.split[[i]][2], fixed=TRUE)) next
+# Handle last group of lines
+src.split <- strsplit(src.lines, "\\t")
+## TODO get rid of lists here
+proteins.list <- list()
+for( i in 153:160) {
         if(src.split[[i]][2] != "") temp <- src.split[[i]][2]
         if(src.split[[i]][2] == "") src.split[[i]][2] <- temp
         proteins.list[[length(proteins.list)+1]] <- src.split[[i]]
 }
-close(src)
-data <- data.frame(matrix(as.numeric(unlist(data.list)),
-                          nrow=length(data.list),
-                          byrow = TRUE))
-# drop last empty column
-data <- data[, 1:15]
-colnames(data) <- c("sample", "time", "temp",
-                    sapply(1:12, function(x) paste0("m", x)))
-
 proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
                           nrow=length(proteins.list),
                           byrow = TRUE))
+
+resor.list <- list()
+for( i in 141:146) {
+        if(grepl("Temp", src.split[[i]][2], fixed=TRUE)) next
+        if(src.split[[i]][2] != "") temp <- src.split[[i]][2]
+        if(src.split[[i]][2] == "") src.split[[i]][2] <- temp
+        resor.list[[length(resor.list)+1]] <- src.split[[i]]
+resors <- data.frame(matrix(as.numeric(unlist(resor.list)),
+                          nrow=length(resors.list),
+                          byrow = TRUE))
 # drop last empty column
-proteins <- proteins[, 2:14]
+resors <- resors[, 2:14]
 
 ####### Helper functions for calibration charts
 
