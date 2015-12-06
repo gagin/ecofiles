@@ -103,6 +103,35 @@ proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
 proteins.x <- c(proteins[1:6, 13],proteins[1:6 ,14])
 proteins.y <- rep(c(0, 0.1, 0.3, 0.75, 1.1, 1.4), times=2)
 
+
+
+##### Without averaging
+protein1.calib <- data.frame(fluor=proteins.x,
+                            conc=proteins.y)
+protein1.model <- lm(conc ~ fluor, data=protein1.calib)
+
+print(
+        ggplot(aes(fluor, conc),
+               data=protein1.calib) +
+                geom_point() +
+                stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+                ggtitle(paste(
+                        "Protein Calibration Curve w/o averaging\n",
+                        filename)) +
+                annotate("text",
+                         x=min(proteins.x)+point.two(proteins.x),
+                         y=max(proteins.y)-point.two(proteins.y),
+                         label=paste(
+                                 get.formula(protein1.model),
+                                 get.r.squared(protein1.model),
+                                 sep="\n")
+                         )+
+                xlab("Fluorescence, unitless") +
+                ylab("Protein conc., mg/ml")
+        )
+
+#####
+
 # Replicate Excel instead - overwrite previous two lines
 proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
 proteins.y <- c(0, 0.1, 0.3, 0.75, 1.1, 1.4)
