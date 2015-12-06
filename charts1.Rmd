@@ -10,6 +10,9 @@ output:
 This script prints calibration charts for all text files in its directory.
 
 ```{r, include=FALSE}
+# Console command
+# setwd("/Users/User/Desktop/ecofiles")
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)
@@ -44,13 +47,10 @@ point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 ```
 
 ```{r, results="hide", echo=FALSE, warning=FALSE}
-#files <- list.files(path=".", pattern="*.txt", full.names=T, recursive=FALSE)
-#for(filename in files)
+files <- list.files(path=".", pattern="*.txt", full.names=T, recursive=FALSE)
+for(filename in files) {
 
-# Console command
-# setwd("/Users/User/Desktop/ecofiles")
-
-filename <- "2015-11-26 EROD pr .txt"
+#filename <- "2015-11-26 EROD pr .txt"
 pattern.name <-  sub(".txt$", "", filename, fixed=FALSE) %>% paste0(".csv")
 # TODO make it read Excel files directly
 if(!file.exists(pattern.name)) pattern.name <- "default.csv"
@@ -234,8 +234,13 @@ for(i in 1:length(samples)) {
         )
 }
 
+## Common scale
+
 print(
         ggplot(aes(timer, resor.prot, color=probe), data=data) +
+                ggtitle(paste(
+                        "Resorufin/Protein per time, single scale\n",
+                        filename)) +
                 geom_point() +
                 guides(colour=FALSE) +
                 facet_wrap(~probe) +
@@ -245,21 +250,43 @@ print(
                               y=max(data$resor.prot)-point.two(data$resor.prot, 0.2),
                               label = l),
                           inherit.aes=FALSE, parse=FALSE)
-                
+        
+)
+
+## Separate scales
+
+print(
+        ggplot(aes(timer, resor.prot, color=probe), data=data) +
+                ggtitle(paste(
+                        "Resorufin/Protein per time, separate scales\n",
+                        filename)) +                
+                geom_point() +
+                guides(colour=FALSE) +
+                facet_wrap(~probe, scales="free", ncol=4) +
+                geom_text(data=data.frame(probe=samples,l=legendary.i),
+                          size=3,
+                          aes(x=min(data$timer)+point.two(data$timer, 0.35),
+                              y=min(data$resor.prot)+point.two(data$resor.prot, 0.1),
+                              label = l),
+                          inherit.aes=FALSE, parse=FALSE)
+        
 )
 
 # All at one chart
 
 print(
         ggplot(aes(timer, resor.prot, color=probe), data=data) +
+                ggtitle(paste(
+                        "Resorufin/Protein per time, all slopes together\n",
+                        filename)) +  
                 geom_point() +
                 annotate("text",
                          x=min(data$timer)+point.two(data$timer, 0.3),
                          y=max(data$resor.prot)-point.two(data$resor.prot, 0.3),
                          label=legendary
                 )
-                
+        
 )
 
-#}
+}
 ```
