@@ -13,9 +13,37 @@ This script prints calibration charts for all text files in its directory.
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+####### Helper functions for calibration charts
+
+get.formula <- function(model) {
+        if(length(model$coefficients) == 2) {
+                sign.char <- "+"
+                if(model$coefficients[1] < 0) sign.char <- "-"
+                res <- paste0("y = ",
+                       sprintf("%.4f", model$coefficients[2],4),
+                       "x ",
+                       sign.char,
+                       " ",
+                       sprintf("%.4f", abs(coefficients(model)[1]))
+                )
+        }
+        if(length(model$coefficients) == 1) {
+                res <- paste0("y = ",
+                       sprintf("%.4f", model$coefficients[1],4),
+                       "x"
+                )    
+        }
+        res
+}
+
+get.r.squared <- function(model) {
+        sprintf("R squared = %.4f", summary(model)$r.squared)
+}
+
+point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 ```
 
-```{r, results="hide", echo=FALSE}
+```{r, results="hide", echo=FALSE, warning=FALSE}
 #files <- list.files(path=".", pattern="*.txt", full.names=T, recursive=FALSE)
 #for(filename in files)
 
@@ -31,7 +59,7 @@ pattern <- read.csv(pattern.name, header = FALSE, na.strings="",
 block.length <- dim(pattern)[1]
 block.width  <- dim(pattern)[2]
 measurements.count <- sum(!is.na(pattern))
-pattern.vector <- as.vector(pattern)
+pattern.vector <- as.vector(as.matrix(pattern))
 
 timers <- seq(0, 30, 2)
 drop.lines <- 5
@@ -43,7 +71,7 @@ close(src)
 data.length <- length(timers) * measurements.count
 data <- data.frame(timer=numeric(data.length),
                    probe=character(data.length),
-                   measurement=numeric(data.length),
+                   fluor=numeric(data.length),
                    stringsAsFactors = FALSE)
 
 for(block in 0:(length(timers)-1)) {
@@ -51,18 +79,16 @@ for(block in 0:(length(timers)-1)) {
         data.lines <- measurements.count*block + 1:measurements.count
         data[data.lines, "timer"] <- timer
         data[data.lines, "probe"] <- pattern.vector[!is.na(pattern.vector)]
-        data[data.lines, "measurement"] <-
+        data[data.lines, "fluor"] <-
                 src.lines[drop.lines + block*(block.length+1) + 1:block.length] %>%
                 strsplit("\\t") %>%
                 unlist %>%
                 matrix(ncol = block.width + 3, byrow = TRUE) %>%
                 "["(, 3:(block.width+2)) %>%
-                as.vector %>% "["(!is.na(pattern.vector))
+                as.vector %>% "["(!is.na(pattern.vector)) %>% as.numeric
 }
-        
-#######################################################################################
 
-# Handle last group of lines
+### Protein calibration
 src.split <- strsplit(src.lines, "\\t")
 ## TODO get rid of lists here
 proteins.list <- list()
@@ -74,46 +100,37 @@ for( i in 153:160) {
 proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
                           nrow=length(proteins.list),
                           byrow = TRUE))
+proteins.x <- c(proteins[1:6, 13],proteins[1:6 ,14])
+proteins.y <- rep(c(0, 0.1, 0.3, 0.75, 1.1, 1.4), times=2)
 
-resor.list <- list()
+# Replicate Excel instead - overwrite previous two lines
+proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
+proteins.y <- c(0, 0.1, 0.3, 0.75, 1.1, 1.4)
+
+protein.calib <- data.frame(fluor=proteins.x,
+                            conc=proteins.y)
+protein.model <- lm(conc ~ fluor, data=protein.calib)
+
+### Resorufin calibration
+
+rs.list <- list()
 for( i in 141:146) {
         if(grepl("Temp", src.split[[i]][2], fixed=TRUE)) next
         if(src.split[[i]][2] != "") temp <- src.split[[i]][2]
         if(src.split[[i]][2] == "") src.split[[i]][2] <- temp
-        resor.list[[length(resor.list)+1]] <- src.split[[i]]
-resors <- data.frame(matrix(as.numeric(unlist(resor.list)),
-                          nrow=length(resors.list),
+        rs.list[[length(rs.list)+1]] <- src.split[[i]]
+}
+rs <- data.frame(matrix(as.numeric(unlist(rs.list)),
+                          nrow=length(rs.list),
                           byrow = TRUE))
-# drop last empty column
-resors <- resors[, 2:14]
 
-####### Helper functions for calibration charts
+rs.x <- c(rs[1:6, 11],rs[1:6 ,12])
+rs.y <- rep(c(0, 0.1, 0.2, 0.3, 0.4, 0.5), times=2)
 
-get.formula <- function(model) {
-        sign.char <- "+"
-        if(model$coefficients[1] < 0) sign.char <- "-"
-        paste0("y = ",
-               sprintf("%.4f", model$coefficients[2],4),
-               "x ",
-               sign.char,
-               " ",
-               sprintf("%.4f", abs(coefficients(model)[1]))
-        )
-}
+rs.calib <- data.frame(fluor=rs.x, conc=rs.y)
+rs.model <- lm(conc ~ fluor-1, data=rs.calib)
 
-get.r.squared <- function(model) {
-        sprintf("R squared = %.4f", summary(model)$r.squared)
-}
-
-point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
-
-######## Protein Calibration
-
-protein.calib.x <- rowMeans(proteins[1:6, 12:13])
-protein.calib.y <- c(0, 0.1, 0.35, 0.75, 1.1, 1.3)
-protein.calib <- data.frame(fluor=protein.calib.x,
-                            conc=protein.calib.y)
-protein.model <- lm(conc ~ fluor, data=protein.calib)
+######## Protein Calibration Chart
 
 print(
         ggplot(aes(fluor, conc),
@@ -124,8 +141,8 @@ print(
                         "Protein Calibration Curve\n",
                         filename)) +
                 annotate("text",
-                         x=min(protein.calib.x)+point.two(protein.calib.x),
-                         y=max(protein.calib.y)-point.two(protein.calib.y),
+                         x=min(proteins.x)+point.two(proteins.x),
+                         y=max(proteins.y)-point.two(proteins.y),
                          label=paste(
                                  get.formula(protein.model),
                                  get.r.squared(protein.model),
@@ -135,13 +152,7 @@ print(
                 ylab("Protein conc., mg/ml")
         )
                      
-####### Resorufin Calibration
-
-rs.calib.x <- rowMeans(data[121:126, 12:13])
-rs.calib.y <- c(0, 0.1, 0.2, 0.3, 0.4, 0.5)
-rs.calib <- data.frame(fluor=rs.calib.x,
-                            conc=rs.calib.y)
-rs.model <- lm(conc ~ fluor, data=rs.calib)
+####### Resorufin Calibration Chart
 
 print(
         ggplot(aes(fluor, conc),
@@ -152,8 +163,8 @@ print(
                         "Resorufin Calibration Curve\n",
                         filename)) +
                 annotate("text",
-                         x=min(rs.calib.x)+point.two(rs.calib.x),
-                         y=max(rs.calib.y)-point.two(rs.calib.y),
+                         x=min(rs.x)+point.two(rs.x),
+                         y=max(rs.y)-point.two(rs.y),
                          label=paste(
                                  get.formula(rs.model),
                                  get.r.squared(rs.model),
@@ -165,51 +176,26 @@ print(
 
 ###### Calculating slopes
 
-samples <- c("βNF1", "βNF2", "βNF3", "βNF4", "βNF5", "βNF S1", "βNF S2", "n", "βNF S3", "βNF S4", "con 11", "con 12", "con 13", "con 14", "con 15", "n1")
-columns <- c("min", "sample", "Fluor 1", "Fluor 2", "Fluor 3", "protein abs 1", "protein abs 2", "protein abs 3", "Resor conc 1", "Resor conc 2", "Resor conc 3", "protein conc 1", "protein conc 2", "protein conc 3", "resor/protein 1", "resor/protein 2", "resor/protein 3", "aver resor/prot", "st dev")
+data$protein.abs <- rep(as.vector(as.matrix(proteins[,3:14]))[!is.na(pattern.vector)], times = length(timers))
+data$rs.conc <- predict(rs.model, data[, "fluor", drop=FALSE])
+data$protein.conc <- predict(protein.model, data.frame(fluor=data$protein.abs))
+data$resor.prot <- data$rs.conc/data$protein.conc
 
-calc <- data.frame(matrix(nrow=length(samples)*16, ncol=length(columns)))
-colnames(calc) <- columns
-
-for( i in seq.int(0,30,2)) {
-        calc[(16*i/2)+(1:16), 1] <- i
-        calc[(16*i/2)+(1:16), 2] <- samples
-                
-        calc[(16*i/2)+(1:8), 3:5] <- data[data$time==i, 4:6]
-        calc[(16*i/2)+(9:16), 3:5] <- data[data$time==i, 7:9]
+# Note what rounding did in Excel
+#> 5159*0.0000962-0.1656
+#[1] 0.3306958
+#> 5159*0.0001-0.16
+#[1] 0.3559
         
-        calc[(16*i/2)+(1:8), 3:5] <- data[data$time==i, 4:6]
-        calc[(16*i/2)+(9:16), 3:5] <- data[data$time==i, 7:9]
-        
-        calc[(16*i/2)+(1:8), 6:8] <- proteins[, 2:4]
-        calc[(16*i/2)+(9:16), 6:8] <- proteins[, 5:7]
-}
+samples <- unique(pattern.vector)
+samples <- samples[!is.na(samples)]
 
-for( i in 0:2) {
-calc[, 9+i] <- predict(rs.model, data.frame(fluor=calc[, 3+i]))
-calc[, 12+i] <- predict(protein.model, data.frame(fluor=calc[, 6+i]))
-calc[, 15+i] <- calc[, 9+i] / calc[, 12+i]
-}
-calc[, 18] <- rowMeans(calc[, 15:17])
-calc[, 19] <- apply(calc[, 15:17], 1, sd)
-
-calc2 <- calc
-#cleaner <- make.names(columns)
-colnames(calc2) <- make.names(columns)
-# Avoid using min and sample as column names to prevent confusion with functions
-colnames(calc2)[1] <- "timer"
-colnames(calc2)[2] <- "smpl"
-
-library(dplyr)
-library(tidyr)
-
-calc3 <- calc2[, c(1,2,15:17)] %>% gather(take, resor.prot, -timer, -smpl)
 
 models <- list()
 legendary.i <- character(length(samples))
 legendary <- character()
 for(i in 1:length(samples)) {
-        models[[i]] <- lm(resor.prot ~ timer, data=calc3[calc3$smpl==samples[i], ])
+        models[[i]] <- lm(resor.prot ~ timer, data[data$probe==samples[i], ])
          legendary.i[i] <- get.formula(models[[i]])
          legendary <- paste0(legendary, 
                             "\n",
@@ -220,14 +206,14 @@ for(i in 1:length(samples)) {
 }
 
 print(
-        ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
+        ggplot(aes(timer, resor.prot, color=probe), data=data) +
                 geom_point() +
                 guides(colour=FALSE) +
-                facet_wrap(~smpl) +
-                geom_text(data=data.frame(smpl=samples,l=legendary.i),
+                facet_wrap(~probe) +
+                geom_text(data=data.frame(probe=samples,l=legendary.i),
                           size=3,
-                          aes(x=min(calc3$timer)+point.two(calc3$timer, 0.5),
-                              y=max(calc3$resor.prot)-point.two(calc3$resor.prot, 0.2),
+                          aes(x=min(data$timer)+point.two(data$timer, 0.5),
+                              y=max(data$resor.prot)-point.two(data$resor.prot, 0.2),
                               label = l),
                           inherit.aes=FALSE, parse=FALSE)
                 
@@ -236,11 +222,11 @@ print(
 # All at one chart
 
 print(
-        ggplot(aes(timer, resor.prot, color=smpl), data=calc3) +
+        ggplot(aes(timer, resor.prot, color=probe), data=data) +
                 geom_point() +
                 annotate("text",
-                         x=min(calc3$timer)+point.two(calc3$timer, 0.3),
-                         y=max(calc3$resor.prot)-point.two(calc3$resor.prot, 0.3),
+                         x=min(data$timer)+point.two(data$timer, 0.3),
+                         y=max(data$resor.prot)-point.two(data$resor.prot, 0.3),
                          label=legendary
                 )
                 
