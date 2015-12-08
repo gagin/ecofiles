@@ -51,7 +51,8 @@ files <- list.files(path=".", pattern="*.txt", full.names=T, recursive=FALSE)
 for(filename in files) {
 
 #filename <- "2015-11-26 EROD pr .txt"
-pattern.name <-  sub(".txt$", "", filename, fixed=FALSE) %>% paste0(".csv")
+namebase <- sub(".txt$", "", filename, fixed=FALSE)
+pattern.name <- paste0(namebase, ".csv")
 # TODO make it read Excel files directly
 if(!file.exists(pattern.name)) pattern.name <- "default.csv"
 pattern <- read.csv(pattern.name, header = FALSE, na.strings="",
@@ -221,18 +222,52 @@ samples <- samples[!is.na(samples)]
 
 
 models <- list()
+submodels <- list()
 legendary.i <- character(length(samples))
 legendary <- character()
+
+per.probe <- nrow(data[data$probe==samples[1] & data$timer==0,])
+submask <- rep(FALSE, per.probe)
+
 for(i in 1:length(samples)) {
+        templist <- list()
+        for(j in 1:per.probe) {
+                
+                mask <- submask
+                mask[j] <- TRUE
+                mask <- rep(mask, length(timers))
+                subdata <- data[data$probe==samples[i], ]
+                subdata <- subdata[mask,]
+                templist[[j]] <- lm(resor.prot ~ timer, subdata)
+        }  
+        submodels[[i]] <- templist
+        
         models[[i]] <- lm(resor.prot ~ timer, data[data$probe==samples[i], ])
-         legendary.i[i] <- get.formula(models[[i]])
-         legendary <- paste0(legendary, 
+        legendary.i[i] <- get.formula(models[[i]])
+        legendary <- paste0(legendary, 
                             "\n",
                             samples[i],
                             ": ",
                             legendary.i[i]
         )
 }
+
+slopes <- data.frame(probe = samples)
+
+for(j in 1:per.probe) {
+        subslope <- numeric(length(samples))
+        for(i in 1:length(samples)) {
+                subslope[i] <- coefficients(submodels[[i]][[j]])["timer"]
+        }
+        slopes[, paste("Fluor", j)] <- subslope
+}
+total.slope <- numeric(length(samples))
+for(i in 1:length(samples)) {
+        total.slope[i] <- coefficients(models[[i]])["timer"]
+}
+slopes[, "All"] <- total.slope
+
+write.csv(x = slopes, file = paste0(namebase, " - Slopes.csv"), row.names = FALSE)
 
 ## Common scale
 
