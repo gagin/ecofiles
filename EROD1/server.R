@@ -1,0 +1,302 @@
+library(shiny)
+
+library(ggplot2)
+#library(dplyr)
+#library(tidyr)
+####### Helper functions for calibration charts
+
+get.formula <- function(model) {
+        if(length(model$coefficients) == 2) {
+                sign.char <- "+"
+                if(model$coefficients[1] < 0) sign.char <- "-"
+                res <- paste0("y = ",
+                              sprintf("%.4f", model$coefficients[2],4),
+                              "x ",
+                              sign.char,
+                              " ",
+                              sprintf("%.4f", abs(coefficients(model)[1]))
+                )
+        }
+        if(length(model$coefficients) == 1) {
+                res <- paste0("y = ",
+                              sprintf("%.4f", model$coefficients[1],4),
+                              "x"
+                )    
+        }
+        res
+}
+
+get.r.squared <- function(model) {
+        sprintf("R squared = %.4f", summary(model)$r.squared)
+}
+
+point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
+
+
+shinyServer(function(input, output) {
+        #output$chart <- renderPlot({
+                output$contents <- renderTable({
+                inFile1 <- input$file1
+        
+        inFile2 <- input$file2
+        
+        if (is.null(inFile1))
+               return(NULL)
+        
+        if (is.null(inFile2))
+               return(NULL)
+        
+        
+        #filename <- "2015-11-26 EROD pr .txt"
+        filename <- inFile1$datapath
+        #namebase <- sub(".txt$", "", filename, fixed=FALSE)
+        #pattern.name <- paste0(namebase, ".csv")
+        # TODO make it read Excel files directly
+        #if(!file.exists(pattern.name)) pattern.name <- "default.csv"
+        pattern.name <- inFile2$datapath
+        pattern <- read.csv(pattern.name, header = FALSE, na.strings="",
+                            stringsAsFactors = FALSE)
+        block.length <- dim(pattern)[1]
+        block.width  <- dim(pattern)[2]
+        measurements.count <- sum(!is.na(pattern))
+        pattern.vector <- as.vector(as.matrix(pattern))
+        
+        timers <- seq(0, 30, 2)
+        drop.lines <- 5
+        # TODO Is BLOCK= 3 comment meaningful?
+        src <- file(filename)
+        src.lines <- readLines(src)
+        close(src)
+        
+        data.length <- length(timers) * measurements.count
+        data <- data.frame(timer=numeric(data.length),
+                           probe=character(data.length),
+                           fluor=numeric(data.length),
+                           stringsAsFactors = FALSE)
+        
+        for(block in 0:(length(timers)-1)) {
+                timer <- timers[block+1]
+                data.lines <- measurements.count*block + 1:measurements.count
+                data[data.lines, "timer"] <- timer
+                data[data.lines, "probe"] <- pattern.vector[!is.na(pattern.vector)]
+                data[data.lines, "fluor"] <-
+                        as.numeric(
+                                as.vector(
+                                        matrix(
+                                                unlist(
+                                                        strsplit(
+                                                                src.lines[drop.lines + block*(block.length+1) + 1:block.length],
+                                                                "\\t"
+                                                        )
+                                                ),
+                                                ncol = block.width + 3,
+                                                byrow = TRUE
+                                        )[, 3:(block.width+2)]
+                                )[!is.na(pattern.vector)]
+                        )
+        }
+        
+        ### Protein calibration
+        src.split <- strsplit(src.lines, "\\t")
+        ## TODO get rid of lists here
+        proteins.list <- list()
+        for( i in 153:160) {
+                if(src.split[[i]][2] != "") temp <- src.split[[i]][2]
+                if(src.split[[i]][2] == "") src.split[[i]][2] <- temp
+                proteins.list[[length(proteins.list)+1]] <- src.split[[i]]
+        }
+        proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
+                                      nrow=length(proteins.list),
+                                      byrow = TRUE))
+        proteins.x <- c(proteins[1:6, 13],proteins[1:6 ,14])
+        proteins.y <- rep(c(0, 0.1, 0.3, 0.75, 1.1, 1.4), times=2)
+        
+        
+        
+        ##### Without averaging
+        protein1.calib <- data.frame(fluor=proteins.x,
+                                     conc=proteins.y)
+        protein1.model <- lm(conc ~ fluor, data=protein1.calib)
+        
+        print(
+                ggplot(aes(fluor, conc),
+                       data=protein1.calib) +
+                        geom_point() +
+                        stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+                        ggtitle(paste(
+                                "Protein Calibration Curve w/o averaging\n",
+                                filename)) +
+                        annotate("text",
+                                 x=min(proteins.x)+point.two(proteins.x),
+                                 y=max(proteins.y)-point.two(proteins.y),
+                                 label=paste(
+                                         get.formula(protein1.model),
+                                         get.r.squared(protein1.model),
+                                         sep="\n")
+                        )+
+                        xlab("Fluorescence, unitless") +
+                        ylab("Protein conc., mg/ml")
+        )
+        
+        #####
+        
+        # Replicate Excel instead - overwrite previous two lines
+        proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
+        proteins.y <- c(0, 0.1, 0.3, 0.75, 1.1, 1.4)
+        
+        protein.calib <- data.frame(fluor=proteins.x,
+                                    conc=proteins.y)
+        protein.model <- lm(conc ~ fluor, data=protein.calib)
+        
+        ### Resorufin calibration
+        
+        rs.list <- list()
+        for( i in 141:146) {
+                if(grepl("Temp", src.split[[i]][2], fixed=TRUE)) next
+                if(src.split[[i]][2] != "") temp <- src.split[[i]][2]
+                if(src.split[[i]][2] == "") src.split[[i]][2] <- temp
+                rs.list[[length(rs.list)+1]] <- src.split[[i]]
+        }
+        rs <- data.frame(matrix(as.numeric(unlist(rs.list)),
+                                nrow=length(rs.list),
+                                byrow = TRUE))
+        
+        rs.x <- c(rs[1:6, 11],rs[1:6 ,12])
+        rs.y <- rep(c(0, 0.1, 0.2, 0.3, 0.4, 0.5), times=2)
+        
+        rs.calib <- data.frame(fluor=rs.x, conc=rs.y)
+        rs.model <- lm(conc ~ fluor-1, data=rs.calib)
+        
+        ######## Protein Calibration Chart
+        
+#         print(
+#                 ggplot(aes(fluor, conc),
+#                        data=protein.calib) +
+#                         geom_point() +
+#                         stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+#                         ggtitle(paste(
+#                                 "Protein Calibration Curve\n",
+#                                 filename)) +
+#                         annotate("text",
+#                                  x=min(proteins.x)+point.two(proteins.x),
+#                                  y=max(proteins.y)-point.two(proteins.y),
+#                                  label=paste(
+#                                          get.formula(protein.model),
+#                                          get.r.squared(protein.model),
+#                                          sep="\n")
+#                         )+
+#                         xlab("Fluorescence, unitless") +
+#                         ylab("Protein conc., mg/ml")
+#         )
+        
+        ####### Resorufin Calibration Chart
+        
+#         print(
+#                 ggplot(aes(fluor, conc),
+#                        data=rs.calib) +
+#                         geom_point() +
+#                         stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+#                         ggtitle(paste(
+#                                 "Resorufin Calibration Curve\n",
+#                                 filename)) +
+#                         annotate("text",
+#                                  x=min(rs.x)+point.two(rs.x),
+#                                  y=max(rs.y)-point.two(rs.y),
+#                                  label=paste(
+#                                          get.formula(rs.model),
+#                                          get.r.squared(rs.model),
+#                                          sep="\n")
+#                         )+
+#                         xlab("Fluorescence, unitless") +
+#                         ylab("Resorufin conc, uM")
+#         )
+        
+        ###### Calculating slopes
+        
+        data$protein.abs <- rep(as.vector(as.matrix(proteins[,3:14]))[!is.na(pattern.vector)], times = length(timers))
+        data$rs.conc <- predict(rs.model, data[, "fluor", drop=FALSE])
+        data$protein.conc <- predict(protein.model, data.frame(fluor=data$protein.abs))
+        data$resor.prot <- data$rs.conc/data$protein.conc
+        
+        # Note what rounding did in Excel
+        #> 5159*0.0000962-0.1656
+        #[1] 0.3306958
+        #> 5159*0.0001-0.16
+        #[1] 0.3559
+        
+        samples <- unique(pattern.vector)
+        samples <- samples[!is.na(samples)]
+        
+        
+        models <- list()
+        submodels <- list()
+        legendary.i <- character(length(samples))
+        legendary <- character()
+        
+        per.probe <- nrow(data[data$probe==samples[1] & data$timer==0,])
+        submask <- rep(FALSE, per.probe)
+        
+        for(i in 1:length(samples)) {
+                templist <- list()
+                for(j in 1:per.probe) {
+                        
+                        mask <- submask
+                        mask[j] <- TRUE
+                        mask <- rep(mask, length(timers))
+                        subdata <- data[data$probe==samples[i], ]
+                        subdata <- subdata[mask,]
+                        templist[[j]] <- lm(resor.prot ~ timer, subdata)
+                }  
+                submodels[[i]] <- templist
+                
+                models[[i]] <- lm(resor.prot ~ timer, data[data$probe==samples[i], ])
+                legendary.i[i] <- get.formula(models[[i]])
+                legendary <- paste0(legendary, 
+                                    "\n",
+                                    samples[i],
+                                    ": ",
+                                    legendary.i[i]
+                )
+        }
+        
+        slopes <- data.frame(probe = samples)
+        
+        for(j in 1:per.probe) {
+                subslope <- numeric(length(samples))
+                for(i in 1:length(samples)) {
+                        subslope[i] <- coefficients(submodels[[i]][[j]])["timer"]
+                }
+                slopes[, paste("Fluor", j)] <- subslope
+        }
+        total.slope <- numeric(length(samples))
+        for(i in 1:length(samples)) {
+                total.slope[i] <- coefficients(models[[i]])["timer"]
+        }
+        slopes[, "All"] <- total.slope
+        
+        #write.csv(x = slopes, file = paste0(namebase, " - Slopes.csv"), row.names = FALSE)
+        
+        ## Common scale
+        
+        #print(
+         #       p<-ggplot(aes(timer, resor.prot, color=probe), data=data) +
+         #               ggtitle(paste(
+         #                       "Resorufin/Protein per time, single scale\n",
+         #                       filename)) +
+         #               geom_point() +
+         #               guides(colour=FALSE) +
+         #               facet_wrap(~probe) +
+         #               geom_text(data=data.frame(probe=samples,l=legendary.i),
+         #                         size=3,
+         #                         aes(x=min(data$timer)+point.two(data$timer, 0.5),
+         #                             y=max(data$resor.prot)-point.two(data$resor.prot, 0.2),
+         #                             label = l),
+         #                         inherit.aes=FALSE, parse=FALSE)
+                
+        #))
+        #print(p)
+        slopes
+        }, digits=5)
+        
+        #output$contents <- renderTable(slopes)
+})
