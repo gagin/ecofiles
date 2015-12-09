@@ -283,7 +283,7 @@ shinyServer(function(input, output) {
                        facet_wrap(~probe) +
                        geom_text(data=data.frame(probe=samples,l=legendary.i),
                                  size=3,
-                                 aes(x=5,#min(datata$timer)+point.two(datata$timer, 0.5),
+                                 aes(x=10,#min(datata$timer)+point.two(datata$timer, 0.5),
                                      y=0.5,#max(datata$resor.prot)-point.two(datata$resor.prot, 0.2),
                                      label = l),
                                  inherit.aes=FALSE, parse=FALSE)
@@ -295,7 +295,7 @@ shinyServer(function(input, output) {
                        facet_wrap(~probe, scales="free", ncol=4) +
                        geom_text(data=data.frame(probe=samples,l=legendary.i),
                                  size=3,
-                                 aes(x=5,#min(datata$timer)+point.two(datata$timer, 0.35),
+                                 aes(x=10,#min(datata$timer)+point.two(datata$timer, 0.35),
                                      y=0.5,#min(datata$resor.prot)+point.two(datata$resor.prot, 0.1),
                                      label = l),
                                  inherit.aes=FALSE, parse=FALSE)
