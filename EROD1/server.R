@@ -35,7 +35,8 @@ point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 
 shinyServer(function(input, output) {
         #output$chart <- renderPlot({
-                output$contents <- renderTable({
+         react<-reactive({
+                 
                 inFile1 <- input$file1
         
         inFile2 <- input$file2
@@ -69,7 +70,7 @@ shinyServer(function(input, output) {
         close(src)
         
         data.length <- length(timers) * measurements.count
-        data <- data.frame(timer=numeric(data.length),
+        datata <- data.frame(timer=numeric(data.length),
                            probe=character(data.length),
                            fluor=numeric(data.length),
                            stringsAsFactors = FALSE)
@@ -77,9 +78,9 @@ shinyServer(function(input, output) {
         for(block in 0:(length(timers)-1)) {
                 timer <- timers[block+1]
                 data.lines <- measurements.count*block + 1:measurements.count
-                data[data.lines, "timer"] <- timer
-                data[data.lines, "probe"] <- pattern.vector[!is.na(pattern.vector)]
-                data[data.lines, "fluor"] <-
+                datata[data.lines, "timer"] <- timer
+                datata[data.lines, "probe"] <- pattern.vector[!is.na(pattern.vector)]
+                datata[data.lines, "fluor"] <-
                         as.numeric(
                                 as.vector(
                                         matrix(
@@ -170,53 +171,49 @@ shinyServer(function(input, output) {
         ######## Protein Calibration Chart
         
 #         print(
-#                 ggplot(aes(fluor, conc),
-#                        data=protein.calib) +
-#                         geom_point() +
-#                         stat_smooth(method="lm", slope=1, show_guide=TRUE) +
-#                         ggtitle(paste(
-#                                 "Protein Calibration Curve\n",
-#                                 filename)) +
-#                         annotate("text",
-#                                  x=min(proteins.x)+point.two(proteins.x),
-#                                  y=max(proteins.y)-point.two(proteins.y),
-#                                  label=paste(
-#                                          get.formula(protein.model),
-#                                          get.r.squared(protein.model),
-#                                          sep="\n")
-#                         )+
-#                         xlab("Fluorescence, unitless") +
-#                         ylab("Protein conc., mg/ml")
+                p1<-ggplot(aes(fluor, conc),
+                       data=protein.calib) +
+                        geom_point() +
+                        stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+                        ggtitle("Protein Calibration Curve") +
+                        annotate("text",
+                                 x=min(proteins.x)+point.two(proteins.x),
+                                 y=max(proteins.y)-point.two(proteins.y),
+                                 label=paste(
+                                         get.formula(protein.model),
+                                         get.r.squared(protein.model),
+                                         sep="\n")
+                        )+
+                        xlab("Fluorescence, unitless") +
+                        ylab("Protein conc., mg/ml")
 #         )
         
         ####### Resorufin Calibration Chart
         
 #         print(
-#                 ggplot(aes(fluor, conc),
-#                        data=rs.calib) +
-#                         geom_point() +
-#                         stat_smooth(method="lm", slope=1, show_guide=TRUE) +
-#                         ggtitle(paste(
-#                                 "Resorufin Calibration Curve\n",
-#                                 filename)) +
-#                         annotate("text",
-#                                  x=min(rs.x)+point.two(rs.x),
-#                                  y=max(rs.y)-point.two(rs.y),
-#                                  label=paste(
-#                                          get.formula(rs.model),
-#                                          get.r.squared(rs.model),
-#                                          sep="\n")
-#                         )+
-#                         xlab("Fluorescence, unitless") +
-#                         ylab("Resorufin conc, uM")
+                p2<-ggplot(aes(fluor, conc),
+                       data=rs.calib) +
+                        geom_point() +
+                        stat_smooth(method="lm", slope=1, show_guide=TRUE) +
+                        ggtitle("Resorufin Calibration Curve") +
+                        annotate("text",
+                                 x=min(rs.x)+point.two(rs.x),
+                                 y=max(rs.y)-point.two(rs.y),
+                                 label=paste(
+                                         get.formula(rs.model),
+                                         get.r.squared(rs.model),
+                                         sep="\n")
+                        )+
+                        xlab("Fluorescence, unitless") +
+                        ylab("Resorufin conc, uM")
 #         )
         
         ###### Calculating slopes
         
-        data$protein.abs <- rep(as.vector(as.matrix(proteins[,3:14]))[!is.na(pattern.vector)], times = length(timers))
-        data$rs.conc <- predict(rs.model, data[, "fluor", drop=FALSE])
-        data$protein.conc <- predict(protein.model, data.frame(fluor=data$protein.abs))
-        data$resor.prot <- data$rs.conc/data$protein.conc
+        datata$protein.abs <- rep(as.vector(as.matrix(proteins[,3:14]))[!is.na(pattern.vector)], times = length(timers))
+        datata$rs.conc <- predict(rs.model, datata[, "fluor", drop=FALSE])
+        datata$protein.conc <- predict(protein.model, data.frame(fluor=datata$protein.abs))
+        datata$resor.prot <- datata$rs.conc/datata$protein.conc
         
         # Note what rounding did in Excel
         #> 5159*0.0000962-0.1656
@@ -233,7 +230,7 @@ shinyServer(function(input, output) {
         legendary.i <- character(length(samples))
         legendary <- character()
         
-        per.probe <- nrow(data[data$probe==samples[1] & data$timer==0,])
+        per.probe <- nrow(datata[datata$probe==samples[1] & datata$timer==0,])
         submask <- rep(FALSE, per.probe)
         
         for(i in 1:length(samples)) {
@@ -243,13 +240,13 @@ shinyServer(function(input, output) {
                         mask <- submask
                         mask[j] <- TRUE
                         mask <- rep(mask, length(timers))
-                        subdata <- data[data$probe==samples[i], ]
+                        subdata <- datata[datata$probe==samples[i], ]
                         subdata <- subdata[mask,]
                         templist[[j]] <- lm(resor.prot ~ timer, subdata)
                 }  
                 submodels[[i]] <- templist
                 
-                models[[i]] <- lm(resor.prot ~ timer, data[data$probe==samples[i], ])
+                models[[i]] <- lm(resor.prot ~ timer, datata[datata$probe==samples[i], ])
                 legendary.i[i] <- get.formula(models[[i]])
                 legendary <- paste0(legendary, 
                                     "\n",
@@ -279,24 +276,39 @@ shinyServer(function(input, output) {
         ## Common scale
         
         #print(
-         #       p<-ggplot(aes(timer, resor.prot, color=probe), data=data) +
-         #               ggtitle(paste(
-         #                       "Resorufin/Protein per time, single scale\n",
-         #                       filename)) +
-         #               geom_point() +
-         #               guides(colour=FALSE) +
-         #               facet_wrap(~probe) +
-         #               geom_text(data=data.frame(probe=samples,l=legendary.i),
-         #                         size=3,
-         #                         aes(x=min(data$timer)+point.two(data$timer, 0.5),
-         #                             y=max(data$resor.prot)-point.two(data$resor.prot, 0.2),
-         #                             label = l),
-         #                         inherit.aes=FALSE, parse=FALSE)
+               p3<-ggplot(aes(timer, resor.prot, color=probe), data=datata) +
+                       ggtitle("Resorufin/Protein per time, single scale") +
+                       geom_point() +
+                       guides(colour=FALSE) +
+                       facet_wrap(~probe) +
+                       geom_text(data=data.frame(probe=samples,l=legendary.i),
+                                 size=3,
+                                 aes(x=5,#min(datata$timer)+point.two(datata$timer, 0.5),
+                                     y=0.5,#max(datata$resor.prot)-point.two(datata$resor.prot, 0.2),
+                                     label = l),
+                                 inherit.aes=FALSE, parse=FALSE)
+         
+               p4<- ggplot(aes(timer, resor.prot, color=probe), data=datata) +
+                       ggtitle("Resorufin/Protein per time, separate scales") +                
+                       geom_point() +
+                       guides(colour=FALSE) +
+                       facet_wrap(~probe, scales="free", ncol=4) +
+                       geom_text(data=data.frame(probe=samples,l=legendary.i),
+                                 size=3,
+                                 aes(x=5,#min(datata$timer)+point.two(datata$timer, 0.35),
+                                     y=0.5,#min(datata$resor.prot)+point.two(datata$resor.prot, 0.1),
+                                     label = l),
+                                 inherit.aes=FALSE, parse=FALSE)
                 
         #))
         #print(p)
-        slopes
-        }, digits=5)
-        
+        list(p1=p1,p2=p2,p3=p3,p4=p4,slopes=slopes)
+         })
+         
+        output$contents <- renderTable({react()$slopes}, digits=5)
+        output$p1 <- renderPlot({react()$p1})
+        output$p2 <- renderPlot({react()$p2})
+        output$p3 <- renderPlot({react()$p3}, height = 1000)
+        output$p4 <- renderPlot({react()$p4}, height = 1000)
         #output$contents <- renderTable(slopes)
 })

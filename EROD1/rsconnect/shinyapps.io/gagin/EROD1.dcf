@@ -2,6 +2,8 @@ name: EROD1
 account: gagin
 server: shinyapps.io
 appId: 72715
-bundleId: 327413
+bundleId: 327471
 url: https://gagin.shinyapps.io/EROD1
-when: 1449650903.98685
+when: 1449656178.42232
+asMultiple: FALSE
+asStatic: FALSE
