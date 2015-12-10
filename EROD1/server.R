@@ -34,6 +34,8 @@ point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 
 # Console degug
 # setwd("/Users/User/Desktop/ecofiles"); filename <- "2015-11-26 EROD pr .txt"; pattern.name <- "default.csv"
+# Deployment
+# library(checkpoint); checkpoint("2015-12-01"); library(rsconnect); deployApp('EROD1',appName="EROD1")
 
 shinyServer(function(input, output) {
         #output$chart <- renderPlot({
