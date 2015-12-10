@@ -1,9 +1,7 @@
 library(shiny)
 
 library(ggplot2)
-#library(dplyr)
-#library(tidyr)
-####### Helper functions for calibration charts
+####### Legend and formatting functions for calibration charts
 
 get.formula <- function(model) {
         if(length(model$coefficients) == 2) {
@@ -32,6 +30,10 @@ get.r.squared <- function(model) {
 
 point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 
+
+
+# Console degug
+# setwd("/Users/User/Desktop/ecofiles"); filename <- "2015-11-26 EROD pr .txt"; pattern.name <- "default.csv"
 
 shinyServer(function(input, output) {
         #output$chart <- renderPlot({
@@ -70,31 +72,35 @@ shinyServer(function(input, output) {
         close(src)
         
         data.length <- length(timers) * measurements.count
-        datata <- data.frame(timer=numeric(data.length),
+        datata <- data.frame(rnum=integer(data.length),
+                             cnum=integer(data.length),
+                             timer=numeric(data.length),
                            probe=character(data.length),
                            fluor=numeric(data.length),
                            stringsAsFactors = FALSE)
         
         for(block in 0:(length(timers)-1)) {
                 timer <- timers[block+1]
+                nonNA.counter <- 1
+                zone <- matrix(unlist(strsplit(
+                        src.lines[drop.lines + block*(block.length+1) + 1:block.length],
+                        "\\t")),
+                        ncol = block.width + 3,
+                        byrow = TRUE)[, 3:(block.width+2)]
                 data.lines <- measurements.count*block + 1:measurements.count
                 datata[data.lines, "timer"] <- timer
-                datata[data.lines, "probe"] <- pattern.vector[!is.na(pattern.vector)]
-                datata[data.lines, "fluor"] <-
-                        as.numeric(
-                                as.vector(
-                                        matrix(
-                                                unlist(
-                                                        strsplit(
-                                                                src.lines[drop.lines + block*(block.length+1) + 1:block.length],
-                                                                "\\t"
-                                                        )
-                                                ),
-                                                ncol = block.width + 3,
-                                                byrow = TRUE
-                                        )[, 3:(block.width+2)]
-                                )[!is.na(pattern.vector)]
-                        )
+                for(co in 1:block.width) {
+                        for (ro in 1:block.length) {
+                                if(!is.na(pattern[ro, co])) {
+                                        nonNA.line <- data.lines[nonNA.counter]
+                                        datata[nonNA.line, "rnum"] <- ro
+                                        datata[nonNA.line, "cnum"] <- co
+                                        datata[nonNA.line, "probe"] <- pattern[ro, co]
+                                        datata[nonNA.line, "fluor"] <- as.numeric(zone[ro, co])
+                                        nonNA.counter <- nonNA.counter + 1
+                                }
+                        }
+                }
         }
         
         ### Protein calibration
@@ -143,7 +149,8 @@ shinyServer(function(input, output) {
         
         # Replicate Excel instead - overwrite previous two lines
         proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
-        proteins.y <- c(0, 0.1, 0.3, 0.75, 1.1, 1.4)
+        #proteins.y <- c(0, 0.1, 0.3, 0.75, 1.1, 1.4)
+        proteins.y <- eval(parse(text=paste0("c(",input$proteins,")")))
         
         protein.calib <- data.frame(fluor=proteins.x,
                                     conc=proteins.y)
@@ -163,7 +170,8 @@ shinyServer(function(input, output) {
                                 byrow = TRUE))
         
         rs.x <- c(rs[1:6, 11],rs[1:6 ,12])
-        rs.y <- rep(c(0, 0.1, 0.2, 0.3, 0.4, 0.5), times=2)
+        #rs.y <- rep(c(0, 0.1, 0.2, 0.3, 0.4, 0.5), times=2)
+        rs.y <- rep(eval(parse(text=paste0("c(",input$rs,")"))), times=2)
         
         rs.calib <- data.frame(fluor=rs.x, conc=rs.y)
         rs.model <- lm(conc ~ fluor-1, data=rs.calib)
@@ -224,28 +232,13 @@ shinyServer(function(input, output) {
         samples <- unique(pattern.vector)
         samples <- samples[!is.na(samples)]
         
-        
+
+        # Calculate slopes per names sample, based on all points        
         models <- list()
-        submodels <- list()
         legendary.i <- character(length(samples))
         legendary <- character()
-        
-        per.probe <- nrow(datata[datata$probe==samples[1] & datata$timer==0,])
-        submask <- rep(FALSE, per.probe)
-        
+        slopes <- data.frame(Probe = samples)
         for(i in 1:length(samples)) {
-                templist <- list()
-                for(j in 1:per.probe) {
-                        
-                        mask <- submask
-                        mask[j] <- TRUE
-                        mask <- rep(mask, length(timers))
-                        subdata <- datata[datata$probe==samples[i], ]
-                        subdata <- subdata[mask,]
-                        templist[[j]] <- lm(resor.prot ~ timer, subdata)
-                }  
-                submodels[[i]] <- templist
-                
                 models[[i]] <- lm(resor.prot ~ timer, datata[datata$probe==samples[i], ])
                 legendary.i[i] <- get.formula(models[[i]])
                 legendary <- paste0(legendary, 
@@ -254,24 +247,41 @@ shinyServer(function(input, output) {
                                     ": ",
                                     legendary.i[i]
                 )
+                slopes[i, "All points"] <- coefficients(models[[i]])["timer"]
         }
         
-        slopes <- data.frame(probe = samples)
         
-        for(j in 1:per.probe) {
-                subslope <- numeric(length(samples))
-                for(i in 1:length(samples)) {
-                        subslope[i] <- coefficients(submodels[[i]][[j]])["timer"]
+        # Calculate slopes for every cell in pattern separately
+        
+        slopes.grid <- matrix(ncol=block.width, nrow=block.length)
+        for(co in 1:block.width)
+                for (ro in 1:block.length) {
+                        if(!is.na(pattern[ro, co]))
+                                slopes.grid[ro, co] <- coefficients(
+                                        lm(resor.prot ~ timer,
+                                           datata[datata$rnum==ro & datata$cnum==co,]
+                                        ))["timer"]
                 }
-                slopes[, paste("Fluor", j)] <- subslope
-        }
-        total.slope <- numeric(length(samples))
-        for(i in 1:length(samples)) {
-                total.slope[i] <- coefficients(models[[i]])["timer"]
-        }
-        slopes[, "All"] <- total.slope
-        
-        #write.csv(x = slopes, file = paste0(namebase, " - Slopes.csv"), row.names = FALSE)
+                                
+        # Now let's make it narrow                                                          
+        columns.per.probe <- as.numeric(input$inGroup)
+        # Debug
+        # cat(paste0(columns.per.probe,"\n"))
+        slopes.lines <- measurements.count/columns.per.probe
+        slopes.narrow <- data.frame(Probe=character(slopes.lines),
+                             stringsAsFactors = FALSE)
+        for(i in 1:columns.per.probe)
+                slopes.narrow[, paste("Fluor", i)] <- numeric(slopes.lines)
+        slopes.set <- 1
+        for(co in seq(1, block.width, columns.per.probe))
+                for(ro in 1:block.length)
+                        if(!is.na(pattern[ro, co])) {
+                                slopes.narrow[slopes.set, "Probe"] <- pattern[ro, co]
+                                for(i in 1:columns.per.probe)
+                                        slopes.narrow[slopes.set, paste("Fluor", i)] <- 
+                                                slopes.grid[ro, co + i - 1]
+                                slopes.set <- slopes.set + 1      
+                        }
         
         ## Common scale
         
@@ -302,13 +312,21 @@ shinyServer(function(input, output) {
                 
         #))
         #print(p)
-        list(p1=p1,p2=p2,p3=p3,p4=p4,slopes=slopes)
+        list(p1=p1, p2=p2, p3=p3, p4=p4,
+             slopes.grid=slopes.grid, slopes.narrow=slopes.narrow, slopes=slopes)
          })
-         
-        output$contents <- renderTable({react()$slopes}, digits=5)
+
+# This way first tab never updates
+#         renderTable5 <- function(x) {renderTable(x, digits=5, include.rownames=FALSE)}         
+#         
+#         output$slopes <- renderTable5({react()$slopes})
+#         output$slopes.narrow <- renderTable5({react()$slopes.narrow})
+#         output$slopes.grid <- renderTable5({react()$slopes.grid})
+        output$slopes <- renderTable({react()$slopes}, digits=5, include.rownames=FALSE)
+        output$slopes.narrow <- renderTable({react()$slopes.narrow}, digits=5, include.rownames=FALSE)
+        output$slopes.grid <- renderTable({react()$slopes.grid}, digits=5, include.rownames=FALSE)
         output$p1 <- renderPlot({react()$p1})
         output$p2 <- renderPlot({react()$p2})
         output$p3 <- renderPlot({react()$p3}, height = 1000)
         output$p4 <- renderPlot({react()$p4}, height = 1000)
-        #output$contents <- renderTable(slopes)
 })
