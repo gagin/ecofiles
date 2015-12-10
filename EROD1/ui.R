@@ -49,8 +49,8 @@ shinyUI(fluidPage(
                          p("Names of samples are uploaded as a CSV table, and the program will try to calculate slope for every non-empty name. Topright 6x4 cells should be kept empty though, as they are used for calibration."),
                          p("Please also notice that in the current implementation protein calibration is done over averaged values for each time mark. When approximation is build over indepenedent points, result is different - at least the intercept is."),
                          h3("Warnings"),
-                         p("Please note that case of three columns per group hasn't been tested."),
-                         p("This first tab is also a workaround for empty first tab bug of this platform."))
+                         p("Please note that case of three columns per group hasn't been tested.")
+                         )
         )
 )
 )
