@@ -3,6 +3,7 @@ library(shiny)
 library(ggplot2)
 ####### Legend and formatting functions for calibration charts
 
+# We want to draw slope and intercept as a nice formula, Excel-like
 get.formula <- function(model) {
         if(length(model$coefficients) == 2) {
                 sign.char <- "+"
@@ -24,6 +25,7 @@ get.formula <- function(model) {
         res
 }
 
+# Keep 4 digits after dot
 get.r.squared <- function(model) {
         sprintf("R squared = %.4f", summary(model)$r.squared)
 }
@@ -32,7 +34,7 @@ point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 
 
 
-# Console degug
+# Console debug
 # setwd("/Users/User/Desktop/ecofiles"); filename <- "2015-11-26 EROD pr .txt"; pattern.name <- "default.csv"
 # Deployment
 # library(checkpoint); checkpoint("2015-12-01"); library(rsconnect); deployApp('EROD1',appName="EROD1")
@@ -45,6 +47,7 @@ shinyServer(function(input, output) {
         
         inFile2 <- input$file2
         
+        # Don't do anything until both input files uploaded
         if (is.null(inFile1))
                return(NULL)
         
@@ -52,12 +55,7 @@ shinyServer(function(input, output) {
                return(NULL)
         
         
-        #filename <- "2015-11-26 EROD pr .txt"
         filename <- inFile1$datapath
-        #namebase <- sub(".txt$", "", filename, fixed=FALSE)
-        #pattern.name <- paste0(namebase, ".csv")
-        # TODO make it read Excel files directly
-        #if(!file.exists(pattern.name)) pattern.name <- "default.csv"
         pattern.name <- inFile2$datapath
         pattern <- read.csv(pattern.name, header = FALSE, na.strings="",
                             stringsAsFactors = FALSE)
@@ -66,39 +64,49 @@ shinyServer(function(input, output) {
         measurements.count <- sum(!is.na(pattern))
         pattern.vector <- as.vector(as.matrix(pattern))
         
+        # These parameters are considered fixed for the machine used as data
+        # source and experiment setting. Still, where possible we keep
+        # calculation dynamic, so future adjustments can potentially be done
+        # via change in this single place
         timers <- seq(0, 30, 2)
         drop.lines <- 5
-        # TODO Is BLOCK= 3 comment meaningful?
         src <- file(filename)
         src.lines <- readLines(src)
         close(src)
-        
+
+        # Initialize new structure for the data.
+        # Because data isn't just squarish, but also some cells are
+        # arbitrary have different meaning (used for calibration),
+        # we don't just use tidyr, but cycle and remember cell positions
+        # in separate two columns
         data.length <- length(timers) * measurements.count
-        datata <- data.frame(rnum=integer(data.length),
+        dat <- data.frame(rnum=integer(data.length),
                              cnum=integer(data.length),
                              timer=numeric(data.length),
                            probe=character(data.length),
                            fluor=numeric(data.length),
                            stringsAsFactors = FALSE)
         
+        # We extract all probes with non-empty names in mapping file
         for(block in 0:(length(timers)-1)) {
                 timer <- timers[block+1]
                 nonNA.counter <- 1
                 zone <- matrix(unlist(strsplit(
-                        src.lines[drop.lines + block*(block.length+1) + 1:block.length],
+                        src.lines[drop.lines + block*(block.length+1) +
+                                          1:block.length],
                         "\\t")),
                         ncol = block.width + 3,
                         byrow = TRUE)[, 3:(block.width+2)]
                 data.lines <- measurements.count*block + 1:measurements.count
-                datata[data.lines, "timer"] <- timer
+                dat[data.lines, "timer"] <- timer
                 for(co in 1:block.width) {
                         for (ro in 1:block.length) {
                                 if(!is.na(pattern[ro, co])) {
                                         nonNA.line <- data.lines[nonNA.counter]
-                                        datata[nonNA.line, "rnum"] <- ro
-                                        datata[nonNA.line, "cnum"] <- co
-                                        datata[nonNA.line, "probe"] <- pattern[ro, co]
-                                        datata[nonNA.line, "fluor"] <- as.numeric(zone[ro, co])
+                                        dat[nonNA.line, "rnum"] <- ro
+                                        dat[nonNA.line, "cnum"] <- co
+                                        dat[nonNA.line, "probe"] <- pattern[ro, co]
+                                        dat[nonNA.line, "fluor"] <- as.numeric(zone[ro, co])
                                         nonNA.counter <- nonNA.counter + 1
                                 }
                         }
@@ -117,41 +125,9 @@ shinyServer(function(input, output) {
         proteins <- data.frame(matrix(as.numeric(unlist(proteins.list)),
                                       nrow=length(proteins.list),
                                       byrow = TRUE))
-        proteins.x <- c(proteins[1:6, 13],proteins[1:6 ,14])
-        proteins.y <- rep(c(0, 0.1, 0.3, 0.75, 1.1, 1.4), times=2)
-        
-        
-        
-        ##### Without averaging
-        protein1.calib <- data.frame(fluor=proteins.x,
-                                     conc=proteins.y)
-        protein1.model <- lm(conc ~ fluor, data=protein1.calib)
-        
-        print(
-                ggplot(aes(fluor, conc),
-                       data=protein1.calib) +
-                        geom_point() +
-                        stat_smooth(method="lm", slope=1, show_guide=TRUE) +
-                        ggtitle(paste(
-                                "Protein Calibration Curve w/o averaging\n",
-                                filename)) +
-                        annotate("text",
-                                 x=min(proteins.x)+point.two(proteins.x),
-                                 y=max(proteins.y)-point.two(proteins.y),
-                                 label=paste(
-                                         get.formula(protein1.model),
-                                         get.r.squared(protein1.model),
-                                         sep="\n")
-                        )+
-                        xlab("Fluorescence, unitless") +
-                        ylab("Protein conc., mg/ml")
-        )
         
         #####
-        
-        # Replicate Excel instead - overwrite previous two lines
         proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
-        #proteins.y <- c(0, 0.1, 0.3, 0.75, 1.1, 1.4)
         proteins.y <- eval(parse(text=paste0("c(",input$proteins,")")))
         
         protein.calib <- data.frame(fluor=proteins.x,
@@ -159,7 +135,8 @@ shinyServer(function(input, output) {
         protein.model <- lm(conc ~ fluor, data=protein.calib)
         
         ### Resorufin calibration
-        
+        # This copying of temperature to every row isn't actually needed,
+        # it's an artifact from a previous version where table was made unified
         rs.list <- list()
         for( i in 141:146) {
                 if(grepl("Temp", src.split[[i]][2], fixed=TRUE)) next
@@ -172,15 +149,14 @@ shinyServer(function(input, output) {
                                 byrow = TRUE))
         
         rs.x <- c(rs[1:6, 11],rs[1:6 ,12])
-        #rs.y <- rep(c(0, 0.1, 0.2, 0.3, 0.4, 0.5), times=2)
         rs.y <- rep(eval(parse(text=paste0("c(",input$rs,")"))), times=2)
         
         rs.calib <- data.frame(fluor=rs.x, conc=rs.y)
+        # Notice that -1 means it's regression through the origin
         rs.model <- lm(conc ~ fluor-1, data=rs.calib)
         
         ######## Protein Calibration Chart
         
-#         print(
                 p1<-ggplot(aes(fluor, conc),
                        data=protein.calib) +
                         geom_point() +
@@ -196,11 +172,9 @@ shinyServer(function(input, output) {
                         )+
                         xlab("Fluorescence, unitless") +
                         ylab("Protein conc., mg/ml")
-#         )
-        
+
         ####### Resorufin Calibration Chart
         
-#         print(
                 p2<-ggplot(aes(fluor, conc),
                        data=rs.calib) +
                         geom_point() +
@@ -216,32 +190,33 @@ shinyServer(function(input, output) {
                         )+
                         xlab("Fluorescence, unitless") +
                         ylab("Resorufin conc, uM")
-#         )
-        
+
         ###### Calculating slopes
         
-        datata$protein.abs <- rep(as.vector(as.matrix(proteins[,3:14]))[!is.na(pattern.vector)], times = length(timers))
-        datata$rs.conc <- predict(rs.model, datata[, "fluor", drop=FALSE])
-        datata$protein.conc <- predict(protein.model, data.frame(fluor=datata$protein.abs))
-        datata$resor.prot <- datata$rs.conc/datata$protein.conc
+        dat$protein.abs <- rep(as.vector(as.matrix(proteins[, 3:14])
+                                            )[!is.na(pattern.vector)],
+                                  times = length(timers))
+        dat$rs.conc <- predict(rs.model, dat[, "fluor", drop=FALSE])
+        dat$protein.conc <- predict(protein.model,
+                                       data.frame(fluor=dat$protein.abs))
+        dat$resor.prot <- dat$rs.conc/dat$protein.conc
         
-        # Note what rounding did in Excel
-        #> 5159*0.0000962-0.1656
-        #[1] 0.3306958
-        #> 5159*0.0001-0.16
-        #[1] 0.3559
         
         samples <- unique(pattern.vector)
         samples <- samples[!is.na(samples)]
         
 
-        # Calculate slopes per names sample, based on all points        
+        # Calculate slopes per probe name, based on all points.
+        # It's the most meaningful way, although isn't what was set as the task.
+        # The version that does it for each pair separately, as was asked,
+        # is farther below.
         models <- list()
         legendary.i <- character(length(samples))
         legendary <- character()
         slopes <- data.frame(Probe = samples)
         for(i in 1:length(samples)) {
-                models[[i]] <- lm(resor.prot ~ timer, datata[datata$probe==samples[i], ])
+                models[[i]] <- lm(resor.prot ~ timer,
+                                  dat[dat$probe==samples[i], ])
                 legendary.i[i] <- get.formula(models[[i]])
                 legendary <- paste0(legendary, 
                                     "\n",
@@ -261,14 +236,13 @@ shinyServer(function(input, output) {
                         if(!is.na(pattern[ro, co]))
                                 slopes.grid[ro, co] <- coefficients(
                                         lm(resor.prot ~ timer,
-                                           datata[datata$rnum==ro & datata$cnum==co,]
+                                           dat[dat$rnum==ro &
+                                                          dat$cnum==co,]
                                         ))["timer"]
                 }
                                 
         # Now let's make it narrow                                                          
         columns.per.probe <- as.numeric(input$inGroup)
-        # Debug
-        # cat(paste0(columns.per.probe,"\n"))
         slopes.lines <- measurements.count/columns.per.probe
         slopes.narrow <- data.frame(Probe=character(slopes.lines),
                              stringsAsFactors = FALSE)
@@ -278,55 +252,62 @@ shinyServer(function(input, output) {
         for(co in seq(1, block.width, columns.per.probe))
                 for(ro in 1:block.length)
                         if(!is.na(pattern[ro, co])) {
-                                slopes.narrow[slopes.set, "Probe"] <- pattern[ro, co]
+                                slopes.narrow[slopes.set,
+                                              "Probe"] <- pattern[ro, co]
                                 for(i in 1:columns.per.probe)
-                                        slopes.narrow[slopes.set, paste("Fluor", i)] <- 
+                                        slopes.narrow[slopes.set, paste("Fluor",
+                                                                        i)] <- 
                                                 slopes.grid[ro, co + i - 1]
                                 slopes.set <- slopes.set + 1      
                         }
         
         ## Common scale
         
-        #print(
-               p3<-ggplot(aes(timer, resor.prot, color=probe), data=datata) +
+               p3<-ggplot(aes(timer, resor.prot, color=probe), data=dat) +
                        ggtitle("Resorufin/Protein per time, single scale") +
                        geom_point() +
                        guides(colour=FALSE) +
                        facet_wrap(~probe) +
                        geom_text(data=data.frame(probe=samples,l=legendary.i),
                                  size=3,
-                                 aes(x=10,#min(datata$timer)+point.two(datata$timer, 0.5),
-                                     y=0.5,#max(datata$resor.prot)-point.two(datata$resor.prot, 0.2),
+                                 # Shiny breaks on out-of-reactive call for some
+                                 # reason, so we just use approximate position
+                                 aes(x=10,
+                                     y=0.5,
                                      label = l),
                                  inherit.aes=FALSE, parse=FALSE)
          
-               p4<- ggplot(aes(timer, resor.prot, color=probe), data=datata) +
+               p4<- ggplot(aes(timer, resor.prot, color=probe), data=dat) +
                        ggtitle("Resorufin/Protein per time, separate scales") +                
                        geom_point() +
                        guides(colour=FALSE) +
                        facet_wrap(~probe, scales="free", ncol=4) +
                        geom_text(data=data.frame(probe=samples,l=legendary.i),
                                  size=3,
-                                 aes(x=10,#min(datata$timer)+point.two(datata$timer, 0.35),
-                                     y=0.5,#min(datata$resor.prot)+point.two(datata$resor.prot, 0.1),
+                                 aes(x=10,
+                                     y=0.5,
                                      label = l),
                                  inherit.aes=FALSE, parse=FALSE)
                 
-        #))
-        #print(p)
-        list(p1=p1, p2=p2, p3=p3, p4=p4,
-             slopes.grid=slopes.grid, slopes.narrow=slopes.narrow, slopes=slopes)
+
+        # Return results
+               list(p1=p1,
+                    p2=p2,
+                    p3=p3,
+                    p4=p4,
+                    slopes.grid=slopes.grid,
+                    slopes.narrow=slopes.narrow,
+                    slopes=slopes)
          })
 
-# This way first tab never updates
-#         renderTable5 <- function(x) {renderTable(x, digits=5, include.rownames=FALSE)}         
-#         
-#         output$slopes <- renderTable5({react()$slopes})
-#         output$slopes.narrow <- renderTable5({react()$slopes.narrow})
-#         output$slopes.grid <- renderTable5({react()$slopes.grid})
-        output$slopes <- renderTable({react()$slopes}, digits=5, include.rownames=FALSE)
-        output$slopes.narrow <- renderTable({react()$slopes.narrow}, digits=5, include.rownames=FALSE)
-        output$slopes.grid <- renderTable({react()$slopes.grid}, digits=5, include.rownames=FALSE)
+# Calculations finished, let's pass resulting data and charts back to ui.R
+         
+        output$slopes <- renderTable({react()$slopes},
+                                     digits=5, include.rownames=FALSE)
+        output$slopes.narrow <- renderTable({react()$slopes.narrow},
+                                            digits=5, include.rownames=FALSE)
+        output$slopes.grid <- renderTable({react()$slopes.grid},
+                                          digits=5, include.rownames=FALSE)
         output$p1 <- renderPlot({react()$p1})
         output$p2 <- renderPlot({react()$p2})
         output$p3 <- renderPlot({react()$p3}, height = 1000)

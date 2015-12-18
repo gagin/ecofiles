@@ -4,15 +4,15 @@ shinyUI(fluidPage(
         h1("Uploading Files"),
         fluidRow(
                 column(4,
-                       tags$a(href = "https://raw.githubusercontent.com/gagin/ecofiles/master/2015-11-26%20EROD%20pr%20.txt", "Data example"),
+                       tags$a(href = "http://gagin.github.io/ecofiles/2015-11-26%20EROD%20pr%20.txt", "Data example"),
                        fileInput('file1', 'Measurements TXT (TSV) File',
                                  accept=c('text/txt', 
                                           'text/tab-separated-values,text/plain', 
                                           '.tsv'))
                 ),
                 column(4,
-                       tags$a(href = "https://raw.githubusercontent.com/gagin/ecofiles/master/default.csv", "Mapping example"),
-                       fileInput('file2', 'Sample mapping CSV File',
+                       tags$a(href = "http://gagin.github.io/ecofiles//ecofiles/master/default.csv", "Mapping example"),
+                       fileInput('file2', 'Mapping of samples CSV File',
                                  accept=c('text/csv', 
                                           'text/comma-separated-values,text/plain', 
                                           '.csv'))
@@ -51,7 +51,7 @@ shinyUI(fluidPage(
                 tabPanel("Info", 
                          h1("What is this?"),
                          p("This script automates operations on aquatic toxicity measurements as performed previously in Excel like this:"),
-                         tags$a(href = "https://raw.githubusercontent.com/gagin/ecofiles/master/2015-11-26%20EROD%20calc.xlsx", "Original calculation file"),
+                         tags$a(href = "http://gagin.github.io/ecofiles/2015-11-26%20EROD%20calc.xlsx", "Original calculation file"),
                          h2("Assumptions"),
                          p("Names of samples are uploaded as a CSV table, and the program will try to calculate slope for every non-empty name. Topright 6x4 cells should be kept empty though, as they are used for calibration."),
                          p("Please also notice that in the current implementation protein calibration is done over averaged values for each time mark. When approximation is build over indepenedent points, result is different - at least the intercept is."),
