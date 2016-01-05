@@ -52,11 +52,11 @@ shinyUI(fluidPage(
                                  column(6, h2("Based on all points per sample"), tableOutput("slopes"))
                          )),
                 tabPanel("Slopes grid", tableOutput("slopes.grid")),
-                tabPanel("Protein", plotOutput("p1")), 
-                tabPanel("Resorufin", plotOutput("p2")),
+                tabPanel("Protein", plotOutput("p1"), tableOutput("p.m")), 
+                tabPanel("Resorufin", plotOutput("p2"), tableOutput("r.m")),
                 tabPanel("Charts same scale", plotOutput("p3")),
                 tabPanel("Charts separate scales", plotOutput("p4")),
-                tabPanel("P/O/R columns", tableOutput("p5")),
+                tabPanel("P/Q narrow data", tableOutput("p5")),
                 tabPanel("Info", 
                          h1("What is this?"),
                          p("This script automates operations on aquatic toxicity measurements as performed previously in Excel like this:"),
@@ -72,7 +72,7 @@ shinyUI(fluidPage(
                          p("2. Resorufin now has intercept"),
                          p("3. Calibration lists now pay attention to number of elements in them - of you need first 5 points, delete sixth calibration value."),
                          p("4. Calibrations now have scale coefficients."),
-                         p("5. Added a tab to display data for last linear model - i.e. P/O/R columns in Excel.")
+                         p("5. Added a tab to display data for last linear model - i.e. P/O columns in Excel, although not unfolded to two columns yet.")
                          )
         )
 )

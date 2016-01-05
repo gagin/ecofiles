@@ -37,7 +37,7 @@ point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 # Console debug
 # setwd("/Users/User/Desktop/ecofiles"); filename <- "2015-11-26 EROD pr .txt"; pattern.name <- "default.csv"
 # setwd("/Users/User/Dropbox/eco"); filename <- "2016-01-04-EROD-Pr-a.txt"; pattern.name <- "Mappnig-2016-01-04-a.csv"
-# input <- list(); input$proteins <- "0, 0.1, 0.3, 0.75, 1.1, 1.4"; input$rs <- "0, 0.1, 0.2, 0.3, 0.4, 0.5"; input$proteins.scale <- "0.172"; input$rs.scale <- "150"; input$inGroup <- "2"
+# input <- list(); input$proteins <- "0, 0.1, 0.3, 0.75, 1.1"; input$rs <- "0, 0.1, 0.2, 0.3, 0.4, 0.5"; input$proteins.scale <- "0.172"; input$rs.scale <- "150"; input$inGroup <- "2"
 # Deployment
 # library(checkpoint); checkpoint("2015-12-01"); library(rsconnect); deployApp('EROD1',appName="EROD1")
 
@@ -256,12 +256,14 @@ shinyServer(function(input, output) {
                                                           dat$cnum==co,]
                                         ))["timer"]
                 }
+        
                                 
         # Now let's make it narrow                                                          
         columns.per.probe <- as.integer(input$inGroup)
         slopes.lines <- measurements.count/columns.per.probe
         slopes.narrow <- data.frame(Probe=character(slopes.lines),
                              stringsAsFactors = FALSE)
+        
         for(i in 1:columns.per.probe)
                 slopes.narrow[, paste("Fluor", i)] <- numeric(slopes.lines)
         slopes.set <- 1
@@ -276,7 +278,9 @@ shinyServer(function(input, output) {
                                                 slopes.grid[ro, co + i - 1]
                                 slopes.set <- slopes.set + 1      
                         }
-        
+
+
+                
         ## Common scale
         
                p3<-ggplot(aes(timer, resor.prot, color=probe), data=dat) +
@@ -311,6 +315,9 @@ shinyServer(function(input, output) {
                     p2=p2,
                     p3=p3,
                     p4=p4,
+                    p.m=as.matrix(protein.model$coefficients),
+                    r.m=as.matrix(rs.model$coefficients),
+                    p5=dat[,c("timer", "probe", "resor.prot")],
                     slopes.grid=slopes.grid,
                     slopes.narrow=slopes.narrow,
                     slopes=slopes)
@@ -328,4 +335,8 @@ shinyServer(function(input, output) {
         output$p2 <- renderPlot({react()$p2})
         output$p3 <- renderPlot({react()$p3}, height = 1000)
         output$p4 <- renderPlot({react()$p4}, height = 1000)
+        output$p5 <- renderTable({react()$p5},
+                                 digits=5, include.rownames=FALSE)
+        output$p.m <- renderTable({react()$p.m}, digits=10)
+        output$r.m <- renderTable({react()$r.m}, digits=10)
 })
