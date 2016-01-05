@@ -36,6 +36,8 @@ point.two <- function(x, shift=0.2) shift*(range(x)[2]-range(x)[1])
 
 # Console debug
 # setwd("/Users/User/Desktop/ecofiles"); filename <- "2015-11-26 EROD pr .txt"; pattern.name <- "default.csv"
+# setwd("/Users/User/Dropbox/eco"); filename <- "2016-01-04-EROD-Pr-a.txt"; pattern.name <- "Mappnig-2016-01-04-a.csv"
+# input <- list(); input$proteins <- "0, 0.1, 0.3, 0.75, 1.1, 1.4"; input$rs <- "0, 0.1, 0.2, 0.3, 0.4, 0.5"; input$proteins.scale <- "0.172"; input$rs.scale <- "150"; input$inGroup <- "2"
 # Deployment
 # library(checkpoint); checkpoint("2015-12-01"); library(rsconnect); deployApp('EROD1',appName="EROD1")
 
@@ -57,6 +59,7 @@ shinyServer(function(input, output) {
         
         filename <- inFile1$datapath
         pattern.name <- inFile2$datapath
+        #### Run manual debung from below this line
         pattern <- read.csv(pattern.name, header = FALSE, na.strings="",
                             stringsAsFactors = FALSE)
         block.length <- dim(pattern)[1]
@@ -127,8 +130,15 @@ shinyServer(function(input, output) {
                                       byrow = TRUE))
         
         #####
-        proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
+        #proteins.x <- rowMeans(cbind(proteins[1:6, 13],proteins[1:6 ,14]))
+        
         proteins.y <- eval(parse(text=paste0("c(",input$proteins,")")))
+        proteins.y.length <- length(proteins.y)
+        proteins.y <- rep(proteins.y, times=2)
+        proteins.y <- proteins.y * as.numeric(input$proteins.scale)
+        
+        proteins.x <- c(proteins[1:proteins.y.length, 13],
+                        proteins[1:proteins.y.length ,14])
         
         protein.calib <- data.frame(fluor=proteins.x,
                                     conc=proteins.y)
@@ -148,12 +158,18 @@ shinyServer(function(input, output) {
                                 nrow=length(rs.list),
                                 byrow = TRUE))
         
-        rs.x <- c(rs[1:6, 11],rs[1:6 ,12])
-        rs.y <- rep(eval(parse(text=paste0("c(",input$rs,")"))), times=2)
+        
+        rs.y <- eval(parse(text=paste0("c(",input$rs,")")))
+        rs.y.length <- length(rs.y)
+        rs.y <- rep(rs.y, times=2)
+        rs.y <- rs.y * as.numeric(input$rs.scale)
+        
+        rs.x <- c(rs[1:rs.y.length , 11],
+                  rs[1:rs.y.length  ,12])
         
         rs.calib <- data.frame(fluor=rs.x, conc=rs.y)
         # Notice that -1 means it's regression through the origin
-        rs.model <- lm(conc ~ fluor-1, data=rs.calib)
+        rs.model <- lm(conc ~ fluor, data=rs.calib)
         
         ######## Protein Calibration Chart
         
@@ -242,7 +258,7 @@ shinyServer(function(input, output) {
                 }
                                 
         # Now let's make it narrow                                                          
-        columns.per.probe <- as.numeric(input$inGroup)
+        columns.per.probe <- as.integer(input$inGroup)
         slopes.lines <- measurements.count/columns.per.probe
         slopes.narrow <- data.frame(Probe=character(slopes.lines),
                              stringsAsFactors = FALSE)
